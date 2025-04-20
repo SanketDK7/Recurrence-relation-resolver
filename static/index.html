@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Equation Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #dac4b5;
+            color: #674833;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .header {
+            background-color: #674833;
+            color: #dac4b5;
+            padding: 2rem 0;
+            border-radius: 0 0 1rem 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin: 0;
+            text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-button {
+            background-color: #bf997e;
+            color: #674833;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            margin: 0.25rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .tab-button:hover {
+            background-color: #9e6f4e;
+            color: #fff;
+        }
+
+        .tab-button.active {
+            background-color: #674833;
+            color: #fff;
+        }
+
+        .input-area {
+            background-color: #fff;
+            border: 1px solid #bf997e;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-top: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+
+        .result-area {
+            background-color: #fff;
+            border: 1px solid #bf997e;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-top: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+
+        .button {
+            background-color: #9e6f4e;
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .button:hover {
+            background-color: #bf997e;
+            color: #fff;
+        }
+
+        .footer {
+            background-color: #674833;
+            color: #dac4b5;
+            padding: 1rem 0;
+            text-align: center;
+            border-radius: 1rem 1rem 0 0;
+            margin-top: 2rem;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="text-3xl font-bold">Enhanced Equation Solver</h1>
+            <p class="text-sm">Solve mathematical equations and recurrence relations with ease</p>
+        </div>
+    </header>
+
+    <main class="container py-8">
+        <div class="flex justify-center space-x-4 mb-6">
+            <button id="math-tab" class="tab-button active" onclick="showMathTab()">Math Equation</button>
+            <button id="recurrence-tab" class="tab-button" onclick="showRecurrenceTab()">Recurrence Relation</button>
+        </div>
+
+        <section id="math-section" class="space-y-6">
+            <div>
+                <label for="equation-input" class="block text-lg font-medium mb-2">Enter your equations:</label>
+                <textarea id="equation-input" class="input-area w-full h-32" placeholder="e.g., x^2 - 5x + 6 = 0"></textarea>
+            </div>
+            <div class="flex space-x-4">
+                <button class="button" onclick="solveMathEquation()">Solve Math Equations</button>
+                <button id="plot-button" class="button" disabled onclick="showPlot()">Show Plot</button>
+                <button class="button" onclick="saveWork()">Save My Work</button>
+            </div>
+            <div>
+                <h2 class="text-lg font-medium mb-2">Solution:</h2>
+                <div id="result-text" class="result-area"></div>
+            </div>
+            <div>
+                <h2 class="text-lg font-medium mb-2">Examples:</h2>
+                <p class="text-sm">
+                    Linear system: 2x+3y=5; 4x-6y=7<br>
+                    Quadratic: x^2 - 5x + 6 = 0<br>
+                    Polynomial: x^3 - 6x^2 + 11x - 6 = 0<br>
+                    Exponential: exp(x) = 10<br>
+                    Logarithmic: log(x) = 2<br>
+                    Inequality: x^2 - 4 > 0
+                </p>
+            </div>
+        </section>
+
+        <section id="recurrence-section" class="space-y-6 hidden">
+            <div>
+                <label for="recurrence-input" class="block text-lg font-medium mb-2">Enter recurrence relation:</label>
+                <textarea id="recurrence-input" class="input-area w-full h-32" placeholder="e.g., T(n)=2T(n/2)+n"></textarea>
+            </div>
+            <div class="flex space-x-4">
+                <button class="button" onclick="solveRecurrenceRelation()">Solve Recurrence Relation</button>
+                <button class="button" onclick="saveWork()">Save My Work</button>
+            </div>
+            <div>
+                <h2 class="text-lg font-medium mb-2">Solution:</h2>
+                <div id="output-text" class="result-area"></div>
+            </div>
+        </section>
+
+        <div id="plot-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-6 rounded-lg max-w-4xl w-full">
+                <h2 class="text-xl font-bold mb-4">Equation Plot</h2>
+                <img id="plot-image" class="w-full" alt="Equation Plot">
+                <button class="button mt-4" onclick="closePlotModal()">Close</button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>© 2025 Enhanced Equation Solver. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        let plotData = null;
+
+        function showMathTab() {
+            document.getElementById('math-section').classList.remove('hidden');
+            document.getElementById('recurrence-section').classList.add('hidden');
+            document.getElementById('math-tab').classList.add('active');
+            document.getElementById('recurrence-tab').classList.remove('active');
+        }
+
+        function showRecurrenceTab() {
+            document.getElementById('math-section').classList.add('hidden');
+            document.getElementById('recurrence-section').classList.remove('hidden');
+            document.getElementById('math-tab').classList.remove('active');
+            document.getElementById('recurrence-tab').classList.add('active');
+        }
+
+        async function solveMathEquation() {
+            const equation = document.getElementById('equation-input').value.trim();
+            document.getElementById('result-text').innerHTML = 'Solving...';
+            document.getElementById('plot-button').disabled = true;
+
+            try {
+                const response = await fetch('/solve_math', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ equation })
+                });
+                const data = await response.json();
+                document.getElementById('result-text').innerHTML = data.result.replace(/\n/g, '<br>');
+                plotData = data;
+                document.getElementById('plot-button').disabled = !data.plot_available;
+            } catch (error) {
+                document.getElementById('result-text').innerHTML = `Error: ${error.message}`;
+            }
+        }
+
+        async function solveRecurrenceRelation() {
+            const recurrence = document.getElementById('recurrence-input').value.trim();
+            document.getElementById('output-text').innerHTML = 'Solving...';
+
+            try {
+                const response = await fetch('/solve_recurrence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recurrence })
+                });
+                const data = await response.json();
+                document.getElementById('output-text').innerHTML = data.result.replace(/\n/g, '<br>');
+            } catch (error) {
+                document.getElementById('output-text').innerHTML = `Error: ${error.message}`;
+            }
+        }
+
+        function showPlot() {
+            if (plotData && plotData.plot_image) {
+                document.getElementById('plot-image').src = `data:image/png;base64,${plotData.plot_image}`;
+                document.getElementById('plot-modal').classList.remove('hidden');
+            }
+        }
+
+        function closePlotModal() {
+            document.getElementById('plot-modal').classList.add('hidden');
+        }
+
+        async function saveWork() {
+    const mode = document.getElementById('math-section').classList.contains('hidden') ? 'recurrence' : 'math';
+    const input = mode === 'math' ? document.getElementById('equation-input').value.trim() : document.getElementById('recurrence-input').value.trim();
+    const output = mode === 'math' ? document.getElementById('result-text').innerText : document.getElementById('output-text').innerText;
+
+    if (!input || !output) {
+        alert('Please solve an equation or recurrence relation before saving.');
+        return;
+    }
+
+    try {
+        const response = await fetch('/save_pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, input, output })
+        });
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'solution.pdf';
+            a.click();
+            window.URL.revokeObjectURL(url);
+            alert('Solution saved successfully as PDF!');
+        } else {
+            const errorText = await response.text();
+            alert(`Error saving PDF: ${errorText}`);
+        }
+    } catch (error) {
+        alert(`Error saving PDF: ${error.message}`);
+    }
+}
+    </script>
+</body>
+</html>

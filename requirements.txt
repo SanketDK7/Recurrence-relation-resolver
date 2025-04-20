@@ -1,0 +1,6 @@
+Flask
+numpy
+sympy
+matplotlib
+reportlab
+Pillow
