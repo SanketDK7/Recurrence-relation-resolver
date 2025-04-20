@@ -224,9 +224,7 @@ def save_to_pdf(equation, solution, explanation="", plot_fig=None):
 def solve_linear_equation(equation_text):
     import re
     import numpy as np
-    from sympy import symbols, sympify
-
-    x, y = symbols('x y')
+    
     equations = equation_text.split(';')
     steps = ["Solving system of linear equations:"]
     explanation = [
@@ -235,60 +233,66 @@ def solve_linear_equation(equation_text):
         "where A is the coefficient matrix, X is the variable matrix, and B is the constant matrix.",
         "The solution is obtained by calculating X = A⁻¹B (matrix inversion method)."
     ]
-
-    def insert_multiplication(expr):
-        expr = re.sub(r'(?<![\*\^])(\d)([a-zA-Z])', r'\1*\2', expr)  # 2x → 2*x
-        expr = re.sub(r'(?<![\*\^])([+-])([a-zA-Z])', r'\1 1*\2', expr)  # -x → -1*x
-        expr = expr.replace(' 1*', '1*')  # Remove extra space
-        return expr
-
+    
     try:
         coefficients = []
         constants = []
-
+        
         for i, eq in enumerate(equations, 1):
-            eq = eq.strip().replace(' ', '')
-            if '=' not in eq:
-                raise ValueError("Missing '=' in equation")
+            eq = eq.replace(' ', '')
+            # Updated regex pattern to handle more cases
+            match = re.match(r'([+-]?\d*)?x([+-]?\d*)?y=([+-]?\d+)', eq)
 
-            lhs, rhs = eq.split('=')
-            lhs = insert_multiplication(lhs)
-            # ❌ DON'T apply insert_multiplication to rhs
-            lhs_expr = sympify(lhs)
-            rhs_expr = sympify(rhs)
+            if match:
+                # Handle coefficient of x
+                a_str = match.group(1)
+                if a_str in ["", "+"]:
+                    a = 1
+                elif a_str == "-":
+                    a = -1
+                else:
+                    a = int(a_str)
 
-            a = float(lhs_expr.coeff(x))
-            b = float(lhs_expr.coeff(y))
-            c = float(rhs_expr.evalf())
+                # Handle coefficient of y
+                b_str = match.group(2)
+                if b_str in ["", "+"]:
+                    b = 1
+                elif b_str == "-":
+                    b = -1
+                else:
+                    b = int(b_str)
 
-            coefficients.append([a, b])
-            constants.append(c)
+                # Handle constant term
+                c = int(match.group(3))
 
-            steps.append(f"Equation {i}: {a}x + {b}y = {c}")
-
+                coefficients.append([a, b])
+                constants.append(c)
+                steps.append(f"Equation {i}: {a}x + {b}y = {c}")
+            else:
+                raise ValueError("Invalid equation format. Expected format: ax + by = c")
+        
         A = np.array(coefficients)
         B = np.array(constants)
-
+        
         steps.append("\nStep 1: Create matrices")
         steps.append("Coefficient matrix (A):\n" + str(A))
         steps.append("Constant matrix (B):\n" + str(B))
-
+        
         steps.append("\nStep 2: Solve using matrix method")
         steps.append("We solve the equation AX = B, where X = [x y]")
         steps.append("Solution is X = A⁻¹B")
-
+        
         try:
             A_inv = np.linalg.inv(A)
             steps.append("Inverse of A:\n" + str(A_inv))
             solution = np.linalg.solve(A, B)
-            steps.append(f"\nSolution: x = {solution[0]}, y = {solution[1]}")
+            steps.append(f"\nSolution: x = {solution[0]:.6f}, y = {solution[1]:.6f}")
 
             plot_steps = []
             for i, (a, b, c) in enumerate(zip([row[0] for row in coefficients],
-                                              [row[1] for row in coefficients],
-                                              constants), 1):
-                expr = a*x + b*y - c
-                plot_steps.append(f"Equation {i}: {expr} = 0")
+                                            [row[1] for row in coefficients],
+                                            constants), 1):
+                plot_steps.append(f"Equation {i}: {a}x + {b}y = {c}")
 
             return "\n".join(steps), solution, plot_steps, "\n".join(explanation)
 
@@ -296,12 +300,9 @@ def solve_linear_equation(equation_text):
             steps.append("\nSystem is either singular or not square.")
             steps.append("The equations may be dependent or inconsistent.")
             return "\n".join(steps), None, None, "\n".join(explanation)
-
+    
     except Exception as e:
         return f"Error: {str(e)}", None, None, ""
-
-
-
 
 def solve_quadratic_equation(equation):
     steps = ["Solving quadratic equation:"]
