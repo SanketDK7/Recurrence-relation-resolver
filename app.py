@@ -1,7 +1,7 @@
 import re
 import math
 import numpy as np
-from sympy import symbols, Eq, solve, log, exp, sympify, lambdify
+from sympy import symbols, Eq, solve, log, exp, sympify, lambdify, Poly
 import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
@@ -169,55 +169,84 @@ def plot_linear_system(equations, solution):
     except Exception as e:
         raise Exception("Failed to save PDF: " + str(e))"""
 
-def save_to_pdf(equation, solution, explanation="", plot_fig=None):
+def save_to_pdf(equation, solution, explanation="", plot_image=None):
     try:
-        file_path = "solution.pdf"  # Temporary file path for Flask
-        doc = SimpleDocTemplate(file_path, pagesize=letter)
+        # Create a temporary directory for PDF generation
+        temp_dir = os.path.join(os.getcwd(), "temp_pdf")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Generate unique filenames
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        pdf_path = os.path.join(temp_dir, f"solution_{timestamp}.pdf")
+        
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter)
         styles = getSampleStyleSheet()
         
+        # Customize styles
         styles['Title'].textColor = colors.HexColor('#1E3A8A')
         styles['Heading2'].textColor = colors.HexColor('#1E3A8A')
-        styles['Normal'].backColor = colors.HexColor('#F0F9FF')
         styles['Normal'].textColor = colors.HexColor('#1E3A8A')
-
+        
         story = []
+        
+        # Title and Date
         story.append(Paragraph("Equation Solution Report", styles['Title']))
         story.append(Paragraph(f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
         story.append(Spacer(1, 24))
         
+        # Equation
         story.append(Paragraph("Equation:", styles['Heading2']))
         story.append(Paragraph(equation, styles['Normal']))
         story.append(Spacer(1, 12))
         
+        # Explanation
         if explanation:
             story.append(Paragraph("Explanation:", styles['Heading2']))
             story.append(Paragraph(explanation, styles['Normal']))
             story.append(Spacer(1, 12))
         
+        # Solution Steps
         story.append(Paragraph("Solution Steps:", styles['Heading2']))
-        for line in solution.split('\n'):
-            if line.strip():
-                story.append(Paragraph(line, styles['Normal']))
-                story.append(Spacer(1, 6))
+        if isinstance(solution, str):
+            for line in solution.split('\n'):
+                if line.strip():
+                    story.append(Paragraph(line, styles['Normal']))
+                    story.append(Spacer(1, 6))
+        else:
+            story.append(Paragraph(str(solution), styles['Normal']))
+            story.append(Spacer(1, 6))
         
-        if plot_fig:
+        # Plot handling with proper resource management
+        if plot_image:
             story.append(Spacer(1, 12))
             story.append(Paragraph("Graphical Representation:", styles['Heading2']))
-            buf = io.BytesIO()
-            plot_fig.savefig(buf, format='png', dpi=100)
-            buf.seek(0)
-            img = PILImage.open(buf)
-            temp_img_path = "temp_plot.png"
-            img.save(temp_img_path)  # Ensure file is saved before using
-            if os.path.exists(temp_img_path):
-                story.append(RLImage(temp_img_path, width=400, height=300))
-                os.remove(temp_img_path)  # Clean up only if file exists
-            else:
-                raise Exception("Temporary image file not created")
-            buf.close()
+            
+            try:
+                # Create temporary plot file with unique name
+                plot_path = os.path.join(temp_dir, f"plot_{timestamp}.png")
+                
+                # Handle base64 encoded image
+                if isinstance(plot_image, str):
+                    img_data = base64.b64decode(plot_image)
+                    with open(plot_path, 'wb') as f:
+                        f.write(img_data)
+                
+                # Add image to PDF
+                if os.path.exists(plot_path):
+                    story.append(RLImage(plot_path, width=400, height=300))
+                
+            except Exception as e:
+                story.append(Paragraph(f"Could not generate plot: {str(e)}", styles['Normal']))
         
+        # Build the PDF document
         doc.build(story)
-        return file_path
+        
+        # Read the generated PDF into memory
+        with open(pdf_path, 'rb') as f:
+            pdf_data = io.BytesIO(f.read())
+        
+        return pdf_data, temp_dir
+        
     except Exception as e:
         raise Exception(f"Failed to save PDF: {str(e)}")
 
@@ -373,47 +402,49 @@ def solve_recurrence_relation(equation):
         "Recurrence relations describe functions in terms of their values at smaller inputs.",
         "The solution method depends on the form of the recurrence:",
         "1. Divide-and-conquer: T(n) = aT(n/b) + f(n) (use Master Theorem)",
-        "2. Non-divide-and-conquer: T(n) = T(n-1) + T(n-2) + f(n)",
+        "2. Complex recurrence: T(n) = T(n-1) + T(n-2) + T(n-3) + ... + f(n)",
         "3. Variable coefficients: T(n) = nT(n-1) + f(n)"
     ]
 
+    # Patterns for different types of recurrences
     divide_conquer_pattern = r't\(n\)=(\d+)t\(n/(\d+)\)\+?(.*)'
-    non_divide_conquer_pattern = r't\(n\)=t\(n-(\d+)\)\+t\(n-(\d+)\)\+?(.*)'
+    complex_pattern = r't\(n\)=(t\(n-\d+\)(?:\+t\(n-\d+\))*)\+?(.*)'
     variable_coefficient_pattern = r't\(n\)=(\d*\.?\d*)\*?n\*?t\(n-(\d+)\)\+?(.*)'
 
     try:
+        # Check for divide-and-conquer pattern
         match = re.match(divide_conquer_pattern, equation)
         if match:
             a = int(match.group(1))
             b = int(match.group(2))
             f_n = match.group(3).strip()
-            steps.append("Recurrence relation: T(n) = " + str(a) + "T(n/" + str(b) + ") + " + f_n)
+            steps.append(f"Recurrence relation: T(n) = {a}T(n/{b}) + {f_n}")
             explanation.append("\nThis is a divide-and-conquer recurrence relation where:")
-            explanation.append("- a = " + str(a) + " (number of subproblems)")
-            explanation.append("- b = " + str(b) + " (factor by which problem size is reduced)")
-            explanation.append("- f(n) = " + f_n + " (cost of dividing/combining)")
+            explanation.append(f"- a = {a} (number of subproblems)")
+            explanation.append(f"- b = {b} (factor by which problem size is reduced)")
+            explanation.append(f"- f(n) = {f_n} (cost of dividing/combining)")
 
             log_b_a = math.log(a, b)
             steps.append("\nStep 1: Calculate log_b(a)")
-            steps.append("log_" + str(b) + "(" + str(a) + ") = " + str(log_b_a))
+            steps.append(f"log_{b}({a}) = {log_b_a}")
 
             if 'n^' in f_n:
                 degree = int(re.search(r'n\^(\d+)', f_n).group(1))
-                steps.append("\nStep 2: Analyze f(n) = n^" + str(degree))
+                steps.append(f"\nStep 2: Analyze f(n) = n^{degree}")
                 if log_b_a > degree:
-                    steps.append("Since log_b(a) > " + str(degree) + ", Case 1 of Master Theorem applies")
-                    steps.append("Time Complexity: O(n^" + str(log_b_a) + ")")
+                    steps.append(f"Since log_b(a) > {degree}, Case 1 of Master Theorem applies")
+                    steps.append(f"Time Complexity: O(n^{log_b_a})")
                 elif log_b_a == degree:
-                    steps.append("Since log_b(a) = " + str(degree) + ", Case 2 of Master Theorem applies")
-                    steps.append("Time Complexity: O(n^" + str(degree) + " log n)")
+                    steps.append(f"Since log_b(a) = {degree}, Case 2 of Master Theorem applies")
+                    steps.append(f"Time Complexity: O(n^{degree} log n)")
                 else:
-                    steps.append("Since log_b_a < " + str(degree) + ", Case 3 of Master Theorem applies")
-                    steps.append("Time Complexity: O(n^" + str(degree) + ")")
+                    steps.append(f"Since log_b_a < {degree}, Case 3 of Master Theorem applies")
+                    steps.append(f"Time Complexity: O(n^{degree})")
             elif 'n' in f_n:
                 steps.append("\nStep 2: Analyze f(n) = n")
                 if log_b_a > 1:
                     steps.append("Since log_b(a) > 1, Case 1 of Master Theorem applies")
-                    steps.append("Time Complexity: O(n^" + str(log_b_a) + ")")
+                    steps.append(f"Time Complexity: O(n^{log_b_a})")
                 elif log_b_a == 1:
                     steps.append("Since log_b(a) = 1, Case 2 of Master Theorem applies")
                     steps.append("Time Complexity: O(n log n)")
@@ -422,61 +453,85 @@ def solve_recurrence_relation(equation):
                     steps.append("Time Complexity: O(n)")
             else:
                 steps.append("\nStep 2: Constant f(n)")
-                steps.append("Time Complexity: O(n^" + str(log_b_a) + ")")
+                steps.append(f"Time Complexity: O(n^{log_b_a})")
             
             steps.append("\nSpace Complexity: O(log n) [due to recursion depth]")
-            return "\n".join(steps + [""] + explanation), None, None, "\n".join(explanation)
-        
-        match = re.match(non_divide_conquer_pattern, equation)
-        if match:
-            k1 = int(match.group(1))
-            k2 = int(match.group(2))
-            f_n = match.group(3).strip()
-            steps.append("Recurrence relation: T(n) = T(n-" + str(k1) + ") + T(n-" + str(k2) + ") + " + f_n)
-            explanation.append("\nThis is a non-divide-and-conquer recurrence relation where:")
-            explanation.append("- The function calls itself with smaller inputs n-" + str(k1) + " and n-" + str(k2))
-            explanation.append("- Additional work per step: " + f_n)
+            return "\n".join(steps), None, None, "\n".join(explanation)
 
-            steps.append("\nStep 1: Analyze recurrence type")
-            if k1 == 1 and k2 == 2:
-                steps.append("This is a Fibonacci-like recurrence relation")
-                steps.append("Time Complexity: O(2^n) (exponential)")
-            else:
-                steps.append("This is a general non-divide-and-conquer recurrence")
-                steps.append("Time Complexity: O(a^n) (exponential)")
+        # Check for complex recurrence pattern
+        match = re.match(complex_pattern, equation)
+        if match:
+            terms = re.findall(r't\(n-(\d+)\)', match.group(1))
+            f_n = match.group(2).strip() if match.group(2) else ""
             
-            steps.append("\nSpace Complexity: O(n) [due to recursion depth]")
-            return "\n".join(steps + [""] + explanation), None, None, "\n".join(explanation)
-        
+            # Convert terms to integers
+            terms = [int(k) for k in terms]
+            
+            steps.append("Complex recurrence relation detected:")
+            terms_str = " + ".join(f"T(n-{k})" for k in terms)
+            steps.append(f"T(n) = {terms_str}{' + ' + f_n if f_n else ''}")
+            
+            explanation.append("\nThis is a complex recurrence relation where:")
+            explanation.append(f"- The function calls itself with {len(terms)} different terms")
+            explanation.append(f"- Terms: {', '.join(f'n-{k}' for k in terms)}")
+            if f_n:
+                explanation.append(f"- Additional work per step: {f_n}")
+
+            steps.append("\nStep 1: Analyze recurrence structure")
+            if len(terms) == 2 and terms == [1, 2]:
+                steps.append("This is a Fibonacci-like recurrence relation")
+                steps.append("Time Complexity: O(φⁿ) where φ ≈ 1.618 (golden ratio)")
+            elif len(terms) == 3 and terms == [1, 2, 3]:
+                steps.append("This is a Tribonacci-like recurrence relation")
+                steps.append("Time Complexity: O(αⁿ) where α ≈ 1.8393")
+                steps.append("Note: α is the real root of x³ - x² - x - 1 = 0")
+            else:
+                max_term = max(terms)
+                steps.append(f"This is a {len(terms)}-term recurrence relation")
+                growth_rate = len(terms) ** (1/max_term)
+                steps.append(f"Time Complexity: O({growth_rate:.4f}ⁿ)")
+                steps.append("Note: This is an approximation based on the number and size of terms")
+
+            max_depth = max(terms)
+            steps.append(f"\nSpace Complexity: O(n) [due to recursion depth of {max_depth}]")
+            
+            if f_n:
+                steps.append("\nAdditional Analysis:")
+                steps.append(f"The recurrence includes a non-homogeneous term: {f_n}")
+                steps.append("This may affect the actual complexity by a polynomial factor")
+
+            return "\n".join(steps), None, None, "\n".join(explanation)
+
+        # Check for variable coefficient pattern
         match = re.match(variable_coefficient_pattern, equation)
         if match:
-            coefficient = float(match.group(1)) if match.group(1) else 1
+            coefficient = float(match.group(1)) if match.group(1) and match.group(1) not in ['', '+'] else 1
             k = int(match.group(2))
             f_n = match.group(3).strip()
-            steps.append("Recurrence relation: T(n) = " + str(coefficient) + "nT(n-" + str(k) + ") + " + f_n)
+            steps.append(f"Recurrence relation: T(n) = {coefficient}nT(n-{k}) + {f_n}")
             explanation.append("\nThis is a variable coefficient recurrence relation where:")
-            explanation.append("- The coefficient depends on n: " + str(coefficient) + "n")
-            explanation.append("- The function calls itself with smaller input n-" + str(k))
-            explanation.append("- Additional work per step: " + f_n)
+            explanation.append(f"- The coefficient depends on n: {coefficient}n")
+            explanation.append(f"- The function calls itself with smaller input n-{k}")
+            explanation.append(f"- Additional work per step: {f_n}")
 
             steps.append("\nStep 1: Analyze recurrence type")
             if coefficient == 1 and k == 1:
                 steps.append("This is a factorial-like recurrence relation")
-                steps.append("Time Complexity: O(n!) (factorial)")
+                steps.append("Time Complexity: O(n!)")
             else:
                 steps.append("This is a variable coefficient recurrence")
-                steps.append("Time Complexity: O(n!) (factorial-like)")
+                steps.append("Time Complexity: O(n!)")
             
             steps.append("\nSpace Complexity: O(n) [due to recursion depth]")
-            return "\n".join(steps + [""] + explanation), None, None, "\n".join(explanation)
-        
+            return "\n".join(steps), None, None, "\n".join(explanation)
+
         raise ValueError("Unrecognized recurrence relation format. Supported formats:\n"
-                         "1. Divide-and-conquer: T(n) = aT(n/b) + f(n)\n"
-                         "2. Non-divide-and-conquer: T(n) = T(n-1) + T(n-2) + f(n)\n"
-                         "3. Variable coefficients: T(n) = nT(n-1) + f(n)")
-    
+                        "1. Divide-and-conquer: T(n) = aT(n/b) + f(n)\n"
+                        "2. Complex recurrence: T(n) = T(n-1) + T(n-2) + T(n-3) + ... + f(n)\n"
+                        "3. Variable coefficients: T(n) = nT(n-1) + f(n)")
+
     except Exception as e:
-        return "Error: " + str(e), None, None, ""
+        return f"Error: {str(e)}", None, None, ""
 
 def solve_polynomial_equation(equation):
     steps = ["Solving polynomial equation:"]
@@ -491,33 +546,52 @@ def solve_polynomial_equation(equation):
     ]
     
     try:
-        x = symbols('x')
+        # Clean up the equation
+        equation = equation.replace(' ', '').replace('³', '**3').replace('²', '**2')
+        
+        # Split equation into left and right sides
+        if '=' not in equation:
+            raise ValueError("Equation must contain '='")
+        
         lhs, rhs = equation.split('=')
-        lhs_expr = sympify(lhs)
-        rhs_expr = sympify(rhs)
-        eq = Eq(lhs_expr, rhs_expr)
         
-        steps.append("Equation: " + equation)
-        steps.append("\nStep 1: Rewrite in standard form")
-        standard_form = sympify("(" + lhs + ") - (" + rhs + ")")
-        steps.append(str(standard_form) + " = 0")
+        # Move everything to the left side
+        expr = f"({lhs})-({rhs})"
         
-        solution = solve(eq, x)
-        steps.append("\nStep 2: Find roots")
+        x = symbols('x')
+        expr = sympify(expr)
         
-        if len(solution) == 0:
+        steps.append(f"Original equation: {equation}")
+        steps.append("\nStep 1: Rearrange to standard form")
+        steps.append(f"{expr} = 0")
+        
+        # Get the degree of the polynomial
+        degree = Poly(expr, x).degree()
+        steps.append(f"\nStep 2: Identify degree of polynomial")
+        steps.append(f"This is a degree {degree} polynomial")
+        
+        # Solve the equation
+        solution = solve(expr, x)
+        steps.append("\nStep 3: Find roots")
+        
+        if not solution:
             steps.append("No solutions found")
         else:
             for i, sol in enumerate(solution, 1):
-                steps.append("Root " + str(i) + ": x = " + str(sol))
+                # Convert complex solutions to a nicer format
+                if sol.is_real:
+                    steps.append(f"Root {i}: x = {float(sol)}")
+                else:
+                    real_part = re.sub(r'\.0$', '', str(float(re.search(r'-?\d+\.?\d*', str(sol.real)).group())))
+                    imag_part = re.sub(r'\.0$', '', str(float(re.search(r'-?\d+\.?\d*', str(sol.imag)).group())))
+                    steps.append(f"Root {i}: x = {real_part} + {imag_part}i")
         
-        steps.append("\nSolution: " + str(solution))
-        
-        plot_expr = str(standard_form)
+        # Create plot expression
+        plot_expr = str(expr)
         return "\n".join(steps), solution, plot_expr, "\n".join(explanation)
     
     except Exception as e:
-        return "Error: " + str(e), None, None, ""
+        return f"Error: {str(e)}", None, None, ""
 
 def solve_exponential_logarithmic_equation(equation):
     steps = ["Solving exponential/logarithmic equation:"]
@@ -530,69 +604,114 @@ def solve_exponential_logarithmic_equation(equation):
     ]
     
     try:
+        # Clean up the equation
+        equation = (equation.replace(' ', '')
+                   .replace('ˣ', '**x')
+                   .replace('ln', 'log')
+                   .replace('e^', 'exp'))
+        
+        if '=' not in equation:
+            raise ValueError("Equation must contain '='")
+        
         x = symbols('x')
         lhs, rhs = equation.split('=')
+        
+        # Convert the equation to symbolic form
         lhs_expr = sympify(lhs)
         rhs_expr = sympify(rhs)
         eq = Eq(lhs_expr, rhs_expr)
         
-        steps.append("Equation: " + equation)
+        steps.append(f"Original equation: {equation}")
+        steps.append("\nStep 1: Convert to standard form")
+        steps.append(f"{lhs_expr} = {rhs_expr}")
         
-        steps.append("\nStep 1: Solve for x")
+        # Solve the equation
         solution = solve(eq, x)
+        steps.append("\nStep 2: Solve for x")
         
-        if len(solution) == 0:
+        if not solution:
             steps.append("No solutions found")
         else:
-            for sol in solution:
-                steps.append("x = " + str(sol))
+            for i, sol in enumerate(solution, 1):
+                if sol.is_real:
+                    steps.append(f"Solution {i}: x = {float(sol)}")
+                else:
+                    steps.append(f"Solution {i}: x = {sol}")
         
-        steps.append("\nSolution: " + str(solution))
-        
-        plot_expr = "(" + lhs + ") - (" + rhs + ")"
+        # Create plot expression
+        plot_expr = f"({lhs}) - ({rhs})"
         return "\n".join(steps), solution, plot_expr, "\n".join(explanation)
     
     except Exception as e:
-        return "Error: " + str(e), None, None, ""
+        return f"Error: {str(e)}", None, None, ""
 
 def solve_inequality(inequality):
     steps = ["Solving inequality:"]
     explanation = [
         "This is an inequality involving mathematical expressions.",
         "Solution methods:",
-        "- Solve the corresponding equation first to find critical points",
-        "- Determine intervals between critical points",
-        "- Test each interval to see if it satisfies the inequality",
-        "The solution may be a range or combination of ranges."
+        "- Convert to standard form (all terms on one side)",
+        "- Find critical points by solving corresponding equation",
+        "- Test intervals between critical points",
+        "- Express solution in interval notation"
     ]
     
     try:
+        # Clean up the inequality
+        inequality = (inequality.replace(' ', '')
+                     .replace('≤', '<=')
+                     .replace('≥', '>=')
+                     .replace('²', '**2'))
+        
+        # Extract operator and convert to standard form
+        op = re.findall(r'[<>]=?', inequality)[0]
+        lhs, rhs = re.split(r'[<>]=?', inequality)
+        
         x = symbols('x')
-        ineq = sympify(inequality)
+        expr = sympify(f"({lhs})-({rhs})")
         
-        steps.append("Inequality: " + inequality)
+        steps.append(f"Original inequality: {inequality}")
+        steps.append("\nStep 1: Rearrange to standard form")
+        steps.append(f"{expr} {op} 0")
         
-        solution = solve(ineq, x)
-        steps.append("\nStep 1: Solve for critical points")
-        
-        if isinstance(solution, list):
-            for i, sol in enumerate(solution, 1):
-                steps.append("Critical point " + str(i) + ": x = " + str(sol))
+        # Find critical points
+        critical_points = solve(expr, x)
+        steps.append("\nStep 2: Find critical points")
+        if critical_points:
+            for i, point in enumerate(critical_points, 1):
+                steps.append(f"Critical point {i}: x = {point}")
         else:
-            steps.append("Critical point: x = " + str(solution))
+            steps.append("No critical points found")
         
-        steps.append("\nStep 2: Determine solution intervals")
-        steps.append("\nSolution: " + str(solution))
+        # Determine intervals
+        if critical_points:
+            steps.append("\nStep 3: Test intervals")
+            # Sort critical points
+            points = sorted([float(p) for p in critical_points if p.is_real])
+            
+            # Test points in each interval
+            intervals = []
+            test_points = [-1000] + points + [1000]
+            for i in range(len(test_points) - 1):
+                test_x = (test_points[i] + test_points[i+1]) / 2
+                result = expr.subs(x, test_x)
+                if eval(f"result {op} 0"):
+                    if i == 0:
+                        intervals.append(f"x < {points[0]}")
+                    elif i == len(test_points) - 2:
+                        intervals.append(f"x > {points[-1]}")
+                    else:
+                        intervals.append(f"{points[i]} < x < {points[i+1]}")
+            
+            solution = " or ".join(intervals)
+            steps.append(f"\nSolution: {solution}")
         
-        if '<' in inequality or '>' in inequality:
-            plot_expr = inequality.replace('=', '==')
-        else:
-            plot_expr = inequality
-        
+        # Create plot expression
+        plot_expr = str(expr)
         return "\n".join(steps), solution, plot_expr, "\n".join(explanation)
     
     except Exception as e:
-        return "Error: " + str(e), None, None, ""
+        return f"Error: {str(e)}", None, None, ""
 
 @app.route('/')
 def index():
@@ -604,27 +723,51 @@ def solve_math():
     equation = data['equation']
     
     try:
+        # Clean up input
+        equation = equation.strip()
+        
+        # Determine equation type and solve
         if ';' in equation and 'x' in equation and 'y' in equation:
+            # Linear system
             result, solution, plot_info, explanation = solve_linear_equation(equation)
             plot_image = plot_linear_system(plot_info, solution) if solution is not None else None
-        elif 'x^2' in equation:
-            result, solution, plot_expr, explanation = solve_quadratic_equation(equation)
-            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
-        elif 'x^' in equation:
-            result, solution, plot_expr, explanation = solve_polynomial_equation(equation)
-            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
-        elif 'log' in equation or 'exp' in equation:
-            result, solution, plot_expr, explanation = solve_exponential_logarithmic_equation(equation)
-            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
-        elif '<' in equation or '>' in equation:
+            
+        elif 'T(n)' in equation or 't(n)' in equation:
+            # Recurrence relation
+            result, solution, _, explanation = solve_recurrence_relation(equation)
+            plot_image = None  # No plotting for recurrence relations
+            
+        elif any(op in equation for op in ['<', '>', '≤', '≥']):
+            # Inequality
             result, solution, plot_expr, explanation = solve_inequality(equation)
             plot_image = plot_equation(plot_expr, solution) if solution is not None else None
+            
+        elif 'log' in equation.lower() or 'ln' in equation.lower() or 'ˣ' in equation or 'exp' in equation:
+            # Exponential/logarithmic
+            result, solution, plot_expr, explanation = solve_exponential_logarithmic_equation(equation)
+            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
+            
+        elif 'x^3' in equation or 'x³' in equation:
+            # Cubic or higher degree polynomial
+            result, solution, plot_expr, explanation = solve_polynomial_equation(equation)
+            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
+            
+        elif 'x^2' in equation or 'x²' in equation:
+            # Quadratic equation
+            result, solution, plot_expr, explanation = solve_quadratic_equation(equation)
+            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
+            
+        elif '^' in equation:
+            # Higher degree polynomial
+            result, solution, plot_expr, explanation = solve_polynomial_equation(equation)
+            plot_image = plot_equation(plot_expr, solution) if solution is not None else None
+            
         else:
             result = "Unsupported equation type"
             solution = None
             plot_image = None
             explanation = ""
-        
+
         return jsonify({
             'result': result,
             'plot_image': plot_image,
@@ -633,7 +776,12 @@ def solve_math():
         })
     
     except Exception as e:
-        return jsonify({'result': "Error: " + str(e), 'plot_image': None, 'plot_available': False, 'explanation': ""})
+        return jsonify({
+            'result': f"Error: {str(e)}",
+            'plot_image': None,
+            'plot_available': False,
+            'explanation': ""
+        })
 
 @app.route('/solve_recurrence', methods=['POST'])
 def solve_recurrence():
@@ -726,7 +874,7 @@ def save_to_pdf(equation, solution, explanation="", plot_image=None):
 
 @app.route('/save_pdf', methods=['POST'])
 def save_pdf():
-    """Improved PDF saving endpoint"""
+    temp_dir = None
     try:
         data = request.get_json()
         if not data:
@@ -742,22 +890,50 @@ def save_pdf():
             return jsonify({'error': 'Equation and solution are required'}), 400
 
         # Generate PDF
-        pdf_path = save_to_pdf(
+        pdf_buffer, temp_dir = save_to_pdf(
             equation=equation,
             solution=solution,
             explanation=explanation,
             plot_image=plot_image
         )
 
-        # Send the PDF file
-        return send_file(
-            pdf_path,
+        # Create response
+        response = send_file(
+            pdf_buffer,
             as_attachment=True,
             download_name='solution.pdf',
             mimetype='application/pdf'
         )
         
+        # Cleanup function
+        def cleanup():
+            try:
+                if temp_dir and os.path.exists(temp_dir):
+                    for filename in os.listdir(temp_dir):
+                        file_path = os.path.join(temp_dir, filename)
+                        try:
+                            if os.path.isfile(file_path):
+                                os.unlink(file_path)
+                        except Exception as e:
+                            print(f"Error deleting file {file_path}: {e}")
+                    os.rmdir(temp_dir)
+                pdf_buffer.close()
+            except Exception as e:
+                print(f"Cleanup error: {e}")
+        
+        response.call_on_close(cleanup)
+        return response
+        
     except Exception as e:
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                for filename in os.listdir(temp_dir):
+                    file_path = os.path.join(temp_dir, filename)
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                os.rmdir(temp_dir)
+            except:
+                pass
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
